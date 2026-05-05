@@ -1,10 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
-#ifndef ELEGANTOTA_USE_ASYNC_WEBSERVER
-#define ELEGANTOTA_USE_ASYNC_WEBSERVER 1
-#endif
-#include <ElegantOTA.h>
 #include <ArduinoJson.h>
 #include <Update.h>
 #include <esp_ota_ops.h>
@@ -21,8 +17,6 @@
 #endif
 
 AsyncWebServer server(80);
-
-// Global runtime JSON; user can inject values from other modules.
 DynamicJsonDocument gRuntimeJson(2048);
 
 static unsigned long bootMillis = 0;
@@ -88,7 +82,40 @@ void setupOtaRoutes() {
 #endif
   });
 
-  ElegantOTA.begin(&server);
+  server.on(
+      "/api/update", HTTP_POST,
+      [](AsyncWebServerRequest* request) {
+        bool ok = !Update.hasError();
+        request->send(ok ? 200 : 500, "application/json", ok ? "{\"ok\":true,\"message\":\"Firmware updated, rebooting\"}" : "{\"ok\":false,\"message\":\"Update failed\"}");
+        if (ok) {
+          delay(250);
+          ESP.restart();
+        }
+      },
+      [](AsyncWebServerRequest* request, String filename, size_t index, uint8_t* data, size_t len, bool final) {
+        (void)request;
+        if (index == 0) {
+          if (!filename.endsWith(".bin")) {
+            Update.abort();
+            return;
+          }
+          if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+            Update.printError(Serial);
+          }
+        }
+
+        if (len > 0) {
+          if (Update.write(data, len) != len) {
+            Update.printError(Serial);
+          }
+        }
+
+        if (final) {
+          if (!Update.end(true)) {
+            Update.printError(Serial);
+          }
+        }
+      });
 }
 #endif
 
@@ -108,7 +135,4 @@ void setup() {
 }
 
 void loop() {
-#if FW_ENABLE_OTA
-  ElegantOTA.loop();
-#endif
 }

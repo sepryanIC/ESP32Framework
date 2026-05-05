@@ -65,7 +65,7 @@ $('btnUpload').addEventListener('click', () => {
     msg(`Uploading ${p}%`);
   };
   xhr.onload = () => msg(xhr.status === 200 ? 'Upload done, device may reboot' : `Upload failed ${xhr.status}`);
-  xhr.open('POST', '/update');
+  xhr.open('POST', '/api/update');
   xhr.send(fd);
 });
 
