@@ -1,7 +1,10 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
-#include <AsyncElegantOTA.h>
+#ifndef ELEGANTOTA_USE_ASYNC_WEBSERVER
+#define ELEGANTOTA_USE_ASYNC_WEBSERVER 1
+#endif
+#include <ElegantOTA.h>
 #include <ArduinoJson.h>
 #include <Update.h>
 
@@ -83,7 +86,7 @@ void setupOtaRoutes() {
 #endif
   });
 
-  AsyncElegantOTA.begin(&server);
+  ElegantOTA.begin(&server);
 }
 #endif
 
@@ -103,4 +106,7 @@ void setup() {
 }
 
 void loop() {
+#if FW_ENABLE_OTA
+  ElegantOTA.loop();
+#endif
 }
