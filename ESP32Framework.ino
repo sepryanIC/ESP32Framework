@@ -7,6 +7,7 @@
 #include <ElegantOTA.h>
 #include <ArduinoJson.h>
 #include <Update.h>
+#include <esp_ota_ops.h>
 
 #define FW_ENABLE_OTA true
 #define FW_ENABLE_WEB_TERMINAL false
@@ -78,11 +79,12 @@ void setupOtaRoutes() {
   });
 
   server.on("/api/rollback", HTTP_POST, [](AsyncWebServerRequest* request) {
-#ifdef CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE
-    bool ok = esp_ota_mark_app_invalid_rollback_and_reboot() == ESP_OK;
+#if defined(CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE) && defined(ESP_OK)
+    esp_err_t rb = esp_ota_mark_app_invalid_rollback_and_reboot();
+    bool ok = (rb == ESP_OK);
     request->send(ok ? 200 : 500, "application/json", ok ? "{\"ok\":true,\"message\":\"Rollback triggered\"}" : "{\"ok\":false,\"message\":\"Rollback failed\"}");
 #else
-    request->send(400, "application/json", "{\"ok\":false,\"message\":\"Rollback not enabled in bootloader\"}");
+    request->send(400, "application/json", "{\"ok\":false,\"message\":\"Rollback not supported by this core/bootloader\"}");
 #endif
   });
 
