@@ -90,19 +90,25 @@ static void saveCredentialToPrefs() {
 }
 
 static void applyCredentialMode() {
+  Serial.println("[CRED] applyCredentialMode()");
   JsonObject c = gRuntimeJson["credential"].as<JsonObject>();
   bool sta = c["staEnabled"] | false;
   bool ap = c["apEnabled"] | false;
 
+  Serial.printf("[CRED] staEnabled=%d apEnabled=%d\n", sta, ap);
   if (!sta && !ap) {
+    Serial.println("[CRED] Mode -> WIFI_OFF");
     WiFi.mode(WIFI_OFF);
     return;
   }
-  WiFi.mode(sta && ap ? WIFI_AP_STA : (sta ? WIFI_STA : WIFI_AP));
+  wifi_mode_t targetMode = sta && ap ? WIFI_AP_STA : (sta ? WIFI_STA : WIFI_AP);
+  Serial.printf("[CRED] Mode -> %d\n", (int)targetMode);
+  WiFi.mode(targetMode);
 
   if (sta) {
     const char* ssid = c["staSsid"] | "";
     const char* pass = c["staPassword"] | "";
+    Serial.printf("[CRED] STA begin SSID=%s\n", ssid);
     if (strlen(ssid) > 0) WiFi.begin(ssid, pass);
   }
   if (ap) {
@@ -111,7 +117,9 @@ static void applyCredentialMode() {
     const char* ssid = c["apSsid"] | "ESP32-Framework";
     const char* pass = c["apPassword"] | "12345678";
     bool hidden = !(c["apBroadcast"] | true);
-    WiFi.softAP(ssid, pass, channel, hidden);
+    Serial.printf("[CRED] AP start SSID=%s CH=%d hidden=%d\n", ssid, channel, hidden);
+    bool apOk = WiFi.softAP(ssid, pass, channel, hidden);
+    Serial.printf("[CRED] AP start result=%d\n", apOk);
   } else {
     WiFi.softAPdisconnect(true);
   }
@@ -148,14 +156,19 @@ static void setupCredentialRoutes() {
             });
 
   server.on("/api/credential/scan", HTTP_GET, [](AsyncWebServerRequest* request) {
+    Serial.println("[CRED][SCAN] request received");
     wifi_mode_t prevMode = WiFi.getMode();
+    Serial.printf("[CRED][SCAN] prevMode=%d\n", (int)prevMode);
 
     // Force STA radio active during scan for better compatibility.
     WiFi.mode(WIFI_STA);
+    Serial.println("[CRED][SCAN] forced WIFI_STA");
     WiFi.disconnect(false, true);
+    delay(150);
     WiFi.scanDelete();
 
     int n = WiFi.scanNetworks(false, true);
+    Serial.printf("[CRED][SCAN] scan result n=%d\n", n);
     DynamicJsonDocument doc(4096);
     doc["ok"] = (n >= 0);
     doc["count"] = (n > 0) ? n : 0;
@@ -164,6 +177,7 @@ static void setupCredentialRoutes() {
     JsonArray arr = doc.createNestedArray("networks");
     if (n > 0) {
       for (int i = 0; i < n && i < 25; i++) {
+        Serial.printf("[CRED][SCAN] #%d SSID=%s BSSID=%s RSSI=%d\n", i, WiFi.SSID(i).c_str(), WiFi.BSSIDstr(i).c_str(), WiFi.RSSI(i));
         JsonObject o = arr.createNestedObject();
         o["ssid"] = WiFi.SSID(i);
         o["bssid"] = WiFi.BSSIDstr(i);
@@ -177,10 +191,13 @@ static void setupCredentialRoutes() {
 
     // Restore configured credential mode after scan.
     applyCredentialMode();
+    Serial.println("[CRED][SCAN] mode restored via applyCredentialMode");
     if (prevMode == WIFI_MODE_NULL) {
       WiFi.mode(WIFI_OFF);
+      Serial.println("[CRED][SCAN] restored WIFI_OFF");
     }
 
+    Serial.printf("[CRED][SCAN] response bytes=%u\n", (unsigned)out.length());
     request->send(200, "application/json", out);
   });
 }
