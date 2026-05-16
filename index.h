@@ -22,7 +22,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     .panel { display:none; }
     .panel.active { display:block; }
     #termView { width:100%; min-height:260px; background:#060a12; color:#49f27f; border-radius:8px; padding:10px; box-sizing:border-box; font-family:monospace; white-space:pre-wrap; overflow:auto; }
-    #termInput { width:100%; box-sizing:border-box; margin-top:8px; border-radius:8px; border:1px solid #334; background:#0f1522; color:#fff; padding:8px; }
+    #termInput { width:100%; box-sizing:border-box; margin-top:8px; border-radius:8px; border:1px solid #334; background:#0f1522; color:#fff; padding:8px; resize:vertical; min-height:96px; font-family:monospace; }
   </style>
 </head>
 <body>
@@ -56,7 +56,11 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     <div class="card">
       <h3>Web Terminal</h3>
       <div id="termView"></div>
-      <input id="termInput" type="text" maxlength="4092" placeholder="ketik command lalu Enter (max 4092 byte)" />
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+        <button id="btnTermClear" type="button">Clear</button>
+        <button id="btnTermDownload" type="button">Download</button>
+      </div>
+      <textarea id="termInput" rows="4" placeholder="ketik command (Enter kirim, Shift+Enter baris baru, max 4092 byte)"></textarea>
       <small id="termMeta">TX/RX max 4092 byte</small>
     </div>
   </div>
@@ -161,8 +165,27 @@ async function pollTerminal(){
   appendTerm(j.data || '');
 }
 
+$('btnTermClear').addEventListener('click', () => {
+  $('termView').textContent = '';
+});
+
+$('btnTermDownload').addEventListener('click', () => {
+  const content = $('termView').textContent || '';
+  const blob = new Blob([content], {type:'text/plain;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `webterm-${Date.now()}.log`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+
 $('termInput').addEventListener('keydown', async (e) => {
   if (e.key !== 'Enter') return;
+  if (e.shiftKey) return;
+  e.preventDefault();
   const data = e.target.value;
   e.target.value = '';
   if (!data) return;
