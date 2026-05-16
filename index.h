@@ -71,6 +71,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     <div class="card">
       <h3>Credential WiFi</h3>
       <p><button id="btnCredLoad">Load</button> <button id="btnCredSave">Save</button> <small id="credMsg"></small></p>
+      <pre id="credDebug" style="white-space:pre-wrap;background:#0f1522;padding:8px;border-radius:8px;max-height:140px;overflow:auto;"></pre>
     </div>
 
     <div class="card">
@@ -103,8 +104,15 @@ let termTimer = null;
 
 const $ = id => document.getElementById(id);
 const msg = t => $('msg').textContent = t;
+function dbg(tag, obj){
+  const line = `[${new Date().toISOString()}] ${tag}` + (obj!==undefined ? ` ${typeof obj==='string'?obj:JSON.stringify(obj)}` : '');
+  console.log(line);
+  const box = $('credDebug');
+  if (box){ box.textContent += line + '\n'; box.scrollTop = box.scrollHeight; }
+}
 
 function setTab(tab){
+  dbg('UI tab', tab);
   activeTab = tab;
   $('tab-ota').classList.toggle('active', tab==='ota');
   $('tab-term').classList.toggle('active', tab==='term');
@@ -165,8 +173,10 @@ $('btnUpload').addEventListener('click', () => {
 });
 
 async function post(url){
+  dbg('POST', url);
   const r = await fetch(url,{method:'POST'});
   const j = await r.json();
+  dbg('CRED save resp', j);
   msg(j.message || 'done');
 }
 $('btnRollback').addEventListener('click',()=>post('/api/rollback'));
@@ -202,6 +212,7 @@ function appendTerm(text){
 async function pollTerminal(){
   const r = await fetch('/api/webterm/poll');
   const j = await r.json();
+  dbg('CRED save resp', j);
   appendTerm(j.data || '');
 }
 
@@ -234,7 +245,7 @@ $('termInput').addEventListener('keydown', async (e) => {
   await fetch('/api/webterm/write', {method:'POST', headers:{'Content-Type':'text/plain'}, body:data});
 });
 
-function setCredMsg(t){ $('credMsg').textContent = t; }
+function setCredMsg(t){ $('credMsg').textContent = t; dbg('CRED msg', t); }
 
 function setCredCardState(){
   const sta = $('staEnabled').checked;
@@ -258,8 +269,11 @@ function applyCredentialToForm(c){
 }
 
 async function loadCredential(){
-  const r = await fetch('/api/credential');
+  dbg('CRED load start');
+  const r = await fetch('/api/credential', {cache:'no-store'});
+  dbg('CRED load HTTP', r.status);
   const j = await r.json();
+  dbg('CRED save resp', j);
   if (j.credential) applyCredentialToForm(j.credential);
 }
 
@@ -278,23 +292,32 @@ function collectCredential(){
 
 $('btnCredLoad').addEventListener('click', loadCredential);
 $('btnCredSave').addEventListener('click', async () => {
+  dbg('CRED save click', collectCredential());
   const r = await fetch('/api/credential', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify({credential: collectCredential()})
   });
   const j = await r.json();
+  dbg('CRED save resp', j);
   setCredMsg(j.message || (j.ok ? 'saved' : 'failed'));
 });
 
 async function scanCredentialNetworks(){
   setCredMsg('Scanning...');
+  const reqId = Date.now();
+  dbg('CRED scan click', {reqId});
   console.log('[CRED][UI] scan click');
   let j = {ok:false, networks:[]};
   try {
-    const r = await fetch('/api/credential/scan', {cache:'no-store'});
+    const url = `/api/credential/scan?t=${Date.now()}`;
+    dbg('CRED scan fetch', url);
+    const r = await fetch(url, {cache:'no-store'});
+    dbg('CRED scan HTTP', r.status);
     j = await r.json();
+    dbg('CRED scan resp', j);
   } catch (e) {
+    dbg('CRED scan error', String(e));
     setCredMsg('Scan error (request gagal)');
     return;
   }
