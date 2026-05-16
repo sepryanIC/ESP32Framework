@@ -14,6 +14,7 @@ DynamicJsonDocument gRuntimeJson(2048);
 
 static unsigned long bootMillis = 0;
 static uint32_t powerOnCounter = 1;
+static volatile bool gPendingApplyCredential = false;
 
 #if FW_ENABLE_WEB_TERMINAL
 static char gWebTermTxBuffer[WEB_TERM_BUFFER_SIZE + 1] = {0};
@@ -197,8 +198,8 @@ static void setupCredentialRoutes() {
 
               gRuntimeJson["credential"] = doc["credential"];
               saveCredentialToPrefs();
-              applyCredentialMode();
-              request->send(200, "application/json", "{\"ok\":true,\"message\":\"Credential saved\"}");
+              gPendingApplyCredential = true;
+              request->send(200, "application/json", "{\"ok\":true,\"message\":\"Credential saved, applying\"}");
             });
 
   server.on("/api/credential_scan", HTTP_GET, [](AsyncWebServerRequest* request) {
@@ -210,7 +211,6 @@ static void setupCredentialRoutes() {
     WiFi.mode(WIFI_STA);
     Serial.println("[CRED][SCAN] forced WIFI_STA");
     WiFi.disconnect(false, true);
-    delay(150);
     WiFi.scanDelete();
 
     int n = WiFi.scanNetworks(false, true);
@@ -235,13 +235,15 @@ static void setupCredentialRoutes() {
     serializeJson(doc, out);
     WiFi.scanDelete();
 
-    // Restore configured credential mode after scan.
-    applyCredentialMode();
-    Serial.println("[CRED][SCAN] mode restored via applyCredentialMode");
+    // Restore quickly without heavy reconnect in handler.
     if (prevMode == WIFI_MODE_NULL) {
       WiFi.mode(WIFI_OFF);
       Serial.println("[CRED][SCAN] restored WIFI_OFF");
+    } else {
+      WiFi.mode(prevMode);
+      Serial.printf("[CRED][SCAN] restored mode=%s\n", modeToStr(prevMode));
     }
+    gPendingApplyCredential = true;
 
     Serial.printf("[CRED][SCAN] response bytes=%u\n", (unsigned)out.length());
     request->send(200, "application/json", out);
@@ -337,7 +339,7 @@ void frameworkSetup() {
   gPrefs.begin(PREF_NS, false);
   seedCredentialDefaults();
   loadCredentialFromPrefs();
-  applyCredentialMode();
+  gPendingApplyCredential = true;
 #else
   WiFi.mode(WIFI_AP);
   WiFi.softAP("ESP32-Framework", "12345678");
@@ -358,6 +360,21 @@ void frameworkSetup() {
 }
 
 void frameworkLoop() {
+#if FW_ENABLE_CREDENTIAL
+  static unsigned long lastStaLog = 0;
+  if (gPendingApplyCredential) {
+    gPendingApplyCredential = false;
+    applyCredentialMode();
+  }
+  if (millis() - lastStaLog > 3000) {
+    lastStaLog = millis();
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.printf("[CRED] STA connected SSID=%s IP=%s RSSI=%d CH=%d\n", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str(), WiFi.RSSI(), WiFi.channel());
+    } else {
+      Serial.printf("[CRED] STA status=%d\n", (int)WiFi.status());
+    }
+  }
+#endif
 #if FW_ENABLE_WEB_TERMINAL
   String cmd = WebRead();
   if (cmd.length() > 0) {
