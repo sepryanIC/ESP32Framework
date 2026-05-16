@@ -289,8 +289,14 @@ $('btnCredSave').addEventListener('click', async () => {
 
 $('btnScan').addEventListener('click', async () => {
   setCredMsg('Scanning...');
-  const r = await fetch('/api/credential/scan');
-  const j = await r.json();
+  let j = {ok:false, networks:[]};
+  try {
+    const r = await fetch('/api/credential/scan');
+    j = await r.json();
+  } catch (e) {
+    setCredMsg('Scan error (request gagal)');
+    return;
+  }
   const html = (j.networks || []).map(n => {
     const ssid = (n.ssid || '').replace(/"/g, '&quot;');
     return `<button type="button" class="kpi" style="display:block;width:100%;text-align:left;margin-top:4px;" data-ssid="${ssid}">${n.ssid || '(hidden)'} | ${n.bssid || '-'} | RSSI ${n.rssi ?? '-'}</button>`;
@@ -301,7 +307,7 @@ $('btnScan').addEventListener('click', async () => {
       $('staSsid').value = btn.dataset.ssid || '';
     });
   });
-  setCredMsg('Scan selesai');
+  setCredMsg(j.ok ? `Scan selesai (${j.count || 0})` : `Scan gagal (${j.scanStatus ?? 'unknown'})`);
 });
 
 startServicesForTab();

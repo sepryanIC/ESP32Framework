@@ -149,16 +149,18 @@ static void setupCredentialRoutes() {
 
   server.on("/api/credential/scan", HTTP_GET, [](AsyncWebServerRequest* request) {
     wifi_mode_t prevMode = WiFi.getMode();
-    if (prevMode == WIFI_MODE_NULL) {
-      WiFi.mode(WIFI_STA);
-    } else if (prevMode == WIFI_MODE_AP) {
-      WiFi.mode(WIFI_AP_STA);
-    }
+
+    // Force STA radio active during scan for better compatibility.
+    WiFi.mode(WIFI_STA);
+    WiFi.disconnect(false, true);
+    WiFi.scanDelete();
 
     int n = WiFi.scanNetworks(false, true);
     DynamicJsonDocument doc(4096);
-    doc["ok"] = true;
+    doc["ok"] = (n >= 0);
     doc["count"] = (n > 0) ? n : 0;
+    doc["scanStatus"] = n;
+
     JsonArray arr = doc.createNestedArray("networks");
     if (n > 0) {
       for (int i = 0; i < n && i < 25; i++) {
@@ -173,10 +175,10 @@ static void setupCredentialRoutes() {
     serializeJson(doc, out);
     WiFi.scanDelete();
 
+    // Restore configured credential mode after scan.
+    applyCredentialMode();
     if (prevMode == WIFI_MODE_NULL) {
       WiFi.mode(WIFI_OFF);
-    } else if (prevMode == WIFI_MODE_AP) {
-      applyCredentialMode();
     }
 
     request->send(200, "application/json", out);
