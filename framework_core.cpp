@@ -27,6 +27,17 @@ static Preferences gPrefs;
 static const char* PREF_NS = "fwcfg";
 #endif
 
+
+static const char* modeToStr(wifi_mode_t m) {
+  switch (m) {
+    case WIFI_MODE_NULL: return "WIFI_OFF";
+    case WIFI_MODE_STA: return "WIFI_STA";
+    case WIFI_MODE_AP: return "WIFI_AP";
+    case WIFI_MODE_APSTA: return "WIFI_AP_STA";
+    default: return "UNKNOWN";
+  }
+}
+
 static String jsonOrDash(const char* key) {
   if (!gRuntimeJson.containsKey(key) || gRuntimeJson[key].isNull()) return "-";
   return gRuntimeJson[key].as<String>();
@@ -77,16 +88,27 @@ static void seedCredentialDefaults() {
 
 static void loadCredentialFromPrefs() {
   seedCredentialDefaults();
+  Serial.println("[CRED] load prefs key=credential");
   String raw = gPrefs.getString("credential", "");
-  if (raw.isEmpty()) return;
+  if (raw.isEmpty()) {
+    Serial.println("[CRED] prefs empty, using defaults");
+    return;
+  }
+  Serial.printf("[CRED] prefs raw: %s\n", raw.c_str());
   DynamicJsonDocument doc(1024);
-  if (deserializeJson(doc, raw) == DeserializationError::Ok) gRuntimeJson["credential"] = doc.as<JsonVariant>();
+  if (deserializeJson(doc, raw) == DeserializationError::Ok) {
+    gRuntimeJson["credential"] = doc.as<JsonVariant>();
+    Serial.println("[CRED] prefs loaded OK");
+  } else {
+    Serial.println("[CRED] prefs JSON parse failed, keeping defaults");
+  }
 }
 
 static void saveCredentialToPrefs() {
   String raw;
   serializeJson(gRuntimeJson["credential"], raw);
   gPrefs.putString("credential", raw);
+  Serial.printf("[CRED] prefs saved: %s\n", raw.c_str());
 }
 
 static void applyCredentialMode() {
@@ -104,12 +126,27 @@ static void applyCredentialMode() {
   wifi_mode_t targetMode = sta && ap ? WIFI_AP_STA : (sta ? WIFI_STA : WIFI_AP);
   Serial.printf("[CRED] Mode -> %d\n", (int)targetMode);
   WiFi.mode(targetMode);
+  Serial.printf("[CRED] current mode now=%s\n", modeToStr(WiFi.getMode()));
 
   if (sta) {
     const char* ssid = c["staSsid"] | "";
     const char* pass = c["staPassword"] | "";
     Serial.printf("[CRED] STA begin SSID=%s\n", ssid);
-    if (strlen(ssid) > 0) WiFi.begin(ssid, pass);
+    if (strlen(ssid) > 0) {
+      WiFi.begin(ssid, pass);
+      unsigned long t0 = millis();
+      wl_status_t st = WiFi.status();
+      while (st != WL_CONNECTED && (millis() - t0) < 8000) {
+        delay(250);
+        st = WiFi.status();
+      }
+      Serial.printf("[CRED] STA status=%d\n", (int)st);
+      if (st == WL_CONNECTED) {
+        Serial.printf("[CRED] STA connected SSID=%s IP=%s RSSI=%d CH=%d\n", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str(), WiFi.RSSI(), WiFi.channel());
+      } else {
+        Serial.println("[CRED] STA not connected yet");
+      }
+    }
   }
   if (ap) {
     int channel = c["apChannel"] | 1;
@@ -120,6 +157,9 @@ static void applyCredentialMode() {
     Serial.printf("[CRED] AP start SSID=%s CH=%d hidden=%d\n", ssid, channel, hidden);
     bool apOk = WiFi.softAP(ssid, pass, channel, hidden);
     Serial.printf("[CRED] AP start result=%d\n", apOk);
+    if (apOk) {
+      Serial.printf("[CRED] AP running SSID=%s IP=%s CH=%d\n", ssid, WiFi.softAPIP().toString().c_str(), WiFi.channel());
+    }
   } else {
     WiFi.softAPdisconnect(true);
   }
@@ -130,6 +170,12 @@ static void setupCredentialRoutes() {
     DynamicJsonDocument out(1400);
     out["ok"] = true;
     out["credential"] = gRuntimeJson["credential"];
+    JsonObject st = out.createNestedObject("wifiStatus");
+    st["mode"] = modeToStr(WiFi.getMode());
+    st["staConnected"] = (WiFi.status() == WL_CONNECTED);
+    st["staIp"] = WiFi.localIP().toString();
+    st["apIp"] = WiFi.softAPIP().toString();
+    st["channel"] = WiFi.channel();
     String body;
     serializeJson(out, body);
     request->send(200, "application/json", body);
