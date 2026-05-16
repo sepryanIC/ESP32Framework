@@ -79,7 +79,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
       <h4>STA Mode</h4>
       <p style="display:flex;gap:8px;">
         <input id="staSsid" placeholder="STA SSID" style="flex:1;" />
-        <button id="btnScan" type="button" onclick="scanCredentialNetworks()">Scan</button>
+        <button id="btnScan" type="button">Scan</button>
       </p>
       <input id="staPassword" placeholder="STA Password" type="password" style="width:100%;" />
       <div id="scanResults" style="margin-top:8px;"></div>
@@ -310,7 +310,7 @@ async function scanCredentialNetworks(){
   console.log('[CRED][UI] scan click');
   let j = {ok:false, networks:[]};
   try {
-    const url = `/api/credential/scan?t=${Date.now()}`;
+    const url = `/api/credential_scan?t=${Date.now()}`;
     dbg('CRED scan fetch', url);
     const r = await fetch(url, {cache:'no-store'});
     dbg('CRED scan HTTP', r.status);

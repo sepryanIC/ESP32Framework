@@ -201,7 +201,7 @@ static void setupCredentialRoutes() {
               request->send(200, "application/json", "{\"ok\":true,\"message\":\"Credential saved\"}");
             });
 
-  server.on("/api/credential/scan", HTTP_GET, [](AsyncWebServerRequest* request) {
+  server.on("/api/credential_scan", HTTP_GET, [](AsyncWebServerRequest* request) {
     Serial.println("[CRED][SCAN] request received");
     wifi_mode_t prevMode = WiFi.getMode();
     Serial.printf("[CRED][SCAN] prevMode=%d\n", (int)prevMode);
