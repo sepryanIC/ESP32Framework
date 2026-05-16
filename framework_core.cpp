@@ -4,6 +4,7 @@
 #include <Update.h>
 #include <WiFi.h>
 #include <esp_ota_ops.h>
+#include <esp_netif.h>
 
 #include "config.h"
 #include "index.h"
@@ -336,6 +337,11 @@ void frameworkSetup() {
   Serial.begin(115200);
   bootMillis = millis();
   seedRuntimeJsonDefaults();
+
+  // Ensure TCP/IP stack is initialized before any WiFi API calls.
+  esp_err_t netifErr = esp_netif_init();
+  Serial.printf("[NETIF] esp_netif_init=%d\n", (int)netifErr);
+  WiFi.persistent(false);
 
 #if FW_ENABLE_CREDENTIAL
   gPrefs.begin(PREF_NS, false);
