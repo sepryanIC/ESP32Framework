@@ -78,7 +78,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
       <h4>STA Mode</h4>
       <p style="display:flex;gap:8px;">
         <input id="staSsid" placeholder="STA SSID" style="flex:1;" />
-        <button id="btnScan">Scan</button>
+        <button id="btnScan" type="button" onclick="scanCredentialNetworks()">Scan</button>
       </p>
       <input id="staPassword" placeholder="STA Password" type="password" style="width:100%;" />
       <div id="scanResults" style="margin-top:8px;"></div>
@@ -287,11 +287,12 @@ $('btnCredSave').addEventListener('click', async () => {
   setCredMsg(j.message || (j.ok ? 'saved' : 'failed'));
 });
 
-$('btnScan').addEventListener('click', async () => {
+async function scanCredentialNetworks(){
   setCredMsg('Scanning...');
+  console.log('[CRED][UI] scan click');
   let j = {ok:false, networks:[]};
   try {
-    const r = await fetch('/api/credential/scan');
+    const r = await fetch('/api/credential/scan', {cache:'no-store'});
     j = await r.json();
   } catch (e) {
     setCredMsg('Scan error (request gagal)');
@@ -308,7 +309,9 @@ $('btnScan').addEventListener('click', async () => {
     });
   });
   setCredMsg(j.ok ? `Scan selesai (${j.count || 0})` : `Scan gagal (${j.scanStatus ?? 'unknown'})`);
-});
+}
+
+$('btnScan').addEventListener('click', scanCredentialNetworks);
 
 startServicesForTab();
 </script>
