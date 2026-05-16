@@ -148,19 +148,37 @@ static void setupCredentialRoutes() {
             });
 
   server.on("/api/credential/scan", HTTP_GET, [](AsyncWebServerRequest* request) {
+    wifi_mode_t prevMode = WiFi.getMode();
+    if (prevMode == WIFI_MODE_NULL) {
+      WiFi.mode(WIFI_STA);
+    } else if (prevMode == WIFI_MODE_AP) {
+      WiFi.mode(WIFI_AP_STA);
+    }
+
     int n = WiFi.scanNetworks(false, true);
     DynamicJsonDocument doc(4096);
     doc["ok"] = true;
+    doc["count"] = (n > 0) ? n : 0;
     JsonArray arr = doc.createNestedArray("networks");
-    for (int i = 0; i < n && i < 25; i++) {
-      JsonObject o = arr.createNestedObject();
-      o["ssid"] = WiFi.SSID(i);
-      o["bssid"] = WiFi.BSSIDstr(i);
-      o["rssi"] = WiFi.RSSI(i);
+    if (n > 0) {
+      for (int i = 0; i < n && i < 25; i++) {
+        JsonObject o = arr.createNestedObject();
+        o["ssid"] = WiFi.SSID(i);
+        o["bssid"] = WiFi.BSSIDstr(i);
+        o["rssi"] = WiFi.RSSI(i);
+      }
     }
+
     String out;
     serializeJson(doc, out);
     WiFi.scanDelete();
+
+    if (prevMode == WIFI_MODE_NULL) {
+      WiFi.mode(WIFI_OFF);
+    } else if (prevMode == WIFI_MODE_AP) {
+      applyCredentialMode();
+    }
+
     request->send(200, "application/json", out);
   });
 }
