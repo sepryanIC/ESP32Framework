@@ -198,7 +198,7 @@ static void setupCredentialRoutes() {
 
               gRuntimeJson["credential"] = doc["credential"];
               saveCredentialToPrefs();
-              gPendingApplyCredential = true;
+              applyCredentialMode();
               request->send(200, "application/json", "{\"ok\":true,\"message\":\"Credential saved, applying\"}");
             });
 
@@ -341,7 +341,7 @@ void frameworkSetup() {
   gPrefs.begin(PREF_NS, false);
   seedCredentialDefaults();
   loadCredentialFromPrefs();
-  gPendingApplyCredential = true;
+  applyCredentialMode();
 #else
   WiFi.mode(WIFI_AP);
   WiFi.softAP("ESP32-Framework", "12345678");
