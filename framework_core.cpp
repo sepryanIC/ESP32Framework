@@ -204,47 +204,49 @@ static void setupCredentialRoutes() {
 
   server.on("/api/credential_scan", HTTP_GET, [](AsyncWebServerRequest* request) {
     Serial.println("[CRED][SCAN] request received");
-    wifi_mode_t prevMode = WiFi.getMode();
-    Serial.printf("[CRED][SCAN] prevMode=%d\n", (int)prevMode);
+    Serial.printf("[CRED][SCAN] currentMode=%s\n", modeToStr(WiFi.getMode()));
 
-    // Force STA radio active during scan for better compatibility.
-    WiFi.mode(WIFI_STA);
-    Serial.println("[CRED][SCAN] forced WIFI_STA");
-    WiFi.disconnect(false, true);
+    // Do not force mode change; AP/AP_STA can scan too on ESP32.
+    // Start async scan, then wait shortly for completion.
     WiFi.scanDelete();
+    int started = WiFi.scanNetworks(true /*async*/, true /*show hidden*/);
+    Serial.printf("[CRED][SCAN] async start result=%d\n", started);
 
-    int n = WiFi.scanNetworks(false, true);
-    Serial.printf("[CRED][SCAN] scan result n=%d\n", n);
+    int n = -1;
+    unsigned long t0 = millis();
+    while ((millis() - t0) < 5000) {
+      n = WiFi.scanComplete();
+      if (n >= 0) break;
+      if (n == -2) { // scan not triggered, try once more
+        WiFi.scanNetworks(true, true);
+      }
+      delay(50);
+      yield();
+    }
+
+    Serial.printf("[CRED][SCAN] scanComplete=%d\n", n);
+
     DynamicJsonDocument doc(4096);
     doc["ok"] = (n >= 0);
     doc["count"] = (n > 0) ? n : 0;
     doc["scanStatus"] = n;
+    doc["mode"] = modeToStr(WiFi.getMode());
 
     JsonArray arr = doc.createNestedArray("networks");
     if (n > 0) {
       for (int i = 0; i < n && i < 25; i++) {
-        Serial.printf("[CRED][SCAN] #%d SSID=%s BSSID=%s RSSI=%d\n", i, WiFi.SSID(i).c_str(), WiFi.BSSIDstr(i).c_str(), WiFi.RSSI(i));
+        Serial.printf("[CRED][SCAN] #%d SSID=%s BSSID=%s RSSI=%d CH=%d\n", i, WiFi.SSID(i).c_str(), WiFi.BSSIDstr(i).c_str(), WiFi.RSSI(i), WiFi.channel(i));
         JsonObject o = arr.createNestedObject();
         o["ssid"] = WiFi.SSID(i);
         o["bssid"] = WiFi.BSSIDstr(i);
         o["rssi"] = WiFi.RSSI(i);
+        o["channel"] = WiFi.channel(i);
       }
     }
 
     String out;
     serializeJson(doc, out);
     WiFi.scanDelete();
-
-    // Restore quickly without heavy reconnect in handler.
-    if (prevMode == WIFI_MODE_NULL) {
-      WiFi.mode(WIFI_OFF);
-      Serial.println("[CRED][SCAN] restored WIFI_OFF");
-    } else {
-      WiFi.mode(prevMode);
-      Serial.printf("[CRED][SCAN] restored mode=%s\n", modeToStr(prevMode));
-    }
-    gPendingApplyCredential = true;
-
     Serial.printf("[CRED][SCAN] response bytes=%u\n", (unsigned)out.length());
     request->send(200, "application/json", out);
   });
